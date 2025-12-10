@@ -1,6 +1,6 @@
 # CRM Famago - Sistema de Gestión de Clientes
 
-Sistema web completo de CRM desarrollado con Flask y Python para gestionar clientes con funcionalidades avanzadas de filtrado, importación/exportación de Excel y dashboard estadístico.
+Sistema web completo de CRM desarrollado con Flask, Python y MongoDB para gestionar clientes con funcionalidades avanzadas de filtrado, importación/exportación de Excel y dashboard estadístico.
 
 ## 🚀 Características
 
@@ -25,23 +25,66 @@ Sistema web completo de CRM desarrollado con Flask y Python para gestionar clien
 - 🎨 **Diseño moderno y responsivo** - funciona perfecto en móvil y desktop
 - 🎯 **UI intuitiva** orientada a vendedores para cargar datos rápido
 - ⚡ **Sin recargas de página** - actualizaciones en tiempo real con JavaScript
-- 🔒 **Base de datos SQLite** - persistencia de datos confiable
+- 🔒 **Base de datos MongoDB** - persistencia de datos NoSQL escalable
 - 📱 **Totalmente responsive** - se adapta a cualquier pantalla
 
 ## 📋 Requisitos
 
 - Python 3.8+
 - pip (gestor de paquetes de Python)
+- MongoDB 4.4+ (instalado y corriendo en localhost:27017)
 
 ## 🛠️ Instalación
 
-### 1. Instalar dependencias
+### 1. Instalar MongoDB
 
+**Windows:**
 ```bash
-pip install flask flask-sqlalchemy openpyxl pandas --break-system-packages
+# Descarga MongoDB Community Server desde:
+# https://www.mongodb.com/try/download/community
+# O instala con Chocolatey:
+choco install mongodb
 ```
 
-### 2. Importar datos iniciales (opcional)
+**macOS:**
+```bash
+brew tap mongodb/brew
+brew install mongodb-community
+brew services start mongodb-community
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install -y mongodb
+sudo systemctl start mongod
+sudo systemctl enable mongod
+```
+
+### 2. Instalar dependencias de Python
+
+```bash
+pip install -r requirements.txt
+```
+
+O manualmente:
+```bash
+pip install flask pymongo openpyxl pandas python-dotenv
+```
+
+### 3. Configurar variables de entorno
+
+Copia el archivo `.env.example` a `.env`:
+```bash
+cp .env.example .env
+```
+
+El archivo `.env` contiene:
+```
+MONGO_URI=mongodb://localhost:27017/
+DB_NAME=crm_famago
+```
+
+### 4. Importar datos iniciales (opcional)
 
 Si tienes un archivo Excel con datos existentes:
 
@@ -51,19 +94,33 @@ python import_data.py
 
 Este script:
 - Lee el archivo Excel proporcionado
-- Crea la base de datos SQLite
+- Se conecta a MongoDB
 - Importa todos los registros
 - Normaliza los datos (ej: "POCA" y "poCA" → "POCA")
+- Crea índices para mejorar el rendimiento
 
 ## 🚀 Uso
 
 ### Iniciar el servidor
 
+**Linux/macOS:**
+```bash
+./start_server.sh
+```
+
+**Windows:**
+```bash
+start_server.bat
+```
+
+**O manualmente:**
 ```bash
 python app.py
 ```
 
 El servidor estará disponible en: **http://localhost:5000**
+
+**Nota:** Asegúrate de que MongoDB esté corriendo antes de iniciar el servidor.
 
 ### Navegación
 
@@ -178,23 +235,45 @@ Obtener lista de localidades únicas
 
 ```
 crm-famago/
-├── app.py                 # Aplicación Flask principal
-├── import_data.py         # Script de importación inicial
-├── clientes.db           # Base de datos SQLite (se crea automáticamente)
+├── app.py                  # Aplicación Flask principal con PyMongo
+├── import_data.py          # Script de importación inicial a MongoDB
 ├── templates/
-│   └── index.html        # Plantilla HTML con CSS y JS
+│   └── index.html         # Plantilla HTML con CSS y JS
+├── requirements.txt       # Dependencias de Python
+├── .env                   # Variables de entorno (MongoDB)
+├── .env.example          # Ejemplo de configuración
+├── start_server.sh       # Script de inicio para Linux/macOS
+├── start_server.bat      # Script de inicio para Windows
 └── README.md             # Este archivo
 ```
 
 ## 💾 Base de Datos
 
-La aplicación usa SQLite por defecto, lo cual es ideal para:
-- Despliegues pequeños/medianos (hasta 10,000 registros sin problema)
-- No requiere servidor de base de datos separado
-- Archivo único fácil de respaldar
-- Portabilidad total
+La aplicación usa **MongoDB**, lo cual ofrece:
+- **Escalabilidad** - maneja fácilmente miles o millones de registros
+- **Flexibilidad** - esquema flexible para adaptarse a cambios
+- **Rendimiento** - consultas rápidas con índices optimizados
+- **Cloud-ready** - fácil migración a MongoDB Atlas (cloud)
+- **Agregaciones** - estadísticas y reportes avanzados
 
-Para producción con muchos usuarios simultáneos, se puede cambiar a PostgreSQL o MySQL modificando la configuración de SQLAlchemy.
+### Configuración de MongoDB
+
+**Local (desarrollo):**
+```
+MONGO_URI=mongodb://localhost:27017/
+DB_NAME=crm_famago
+```
+
+**MongoDB Atlas (producción):**
+```
+MONGO_URI=mongodb+srv://usuario:contraseña@cluster.mongodb.net/?retryWrites=true&w=majority
+DB_NAME=crm_famago
+```
+
+### Colecciones
+
+- **clientes** - Almacena toda la información de clientes
+  - Índices en: `cliente`, `localidad`, `intencion_comprar`
 
 ## 🔒 Seguridad
 

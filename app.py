@@ -1,62 +1,76 @@
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, request, jsonify, send_file
+from pymongo import MongoClient
+from bson import ObjectId
 from datetime import datetime
 import pandas as pd
 import os
 from io import BytesIO
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///clientes.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
-db = SQLAlchemy(app)
 
-class Cliente(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    fecha = db.Column(db.DateTime, default=datetime.now)
-    cliente = db.Column(db.String(200), nullable=False)
-    nombre_negocio = db.Column(db.String(200))
-    localidad = db.Column(db.String(100))
-    direccion = db.Column(db.String(200))
-    barrio = db.Column(db.String(100))
-    dni = db.Column(db.String(20))
-    es_cliente = db.Column(db.String(20))
-    detalle = db.Column(db.Text)
-    interes_1 = db.Column(db.String(100))
-    interes_2 = db.Column(db.String(100))
-    interes_3 = db.Column(db.String(100))
-    cantidad_compras = db.Column(db.String(50))
-    intencion_comprar = db.Column(db.String(50), nullable=False)
-    accion = db.Column(db.String(200))
-    comentario = db.Column(db.Text)
-    fecha_nacimiento = db.Column(db.Date)
-    años = db.Column(db.Integer)
+# Configuración de MongoDB
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+DB_NAME = os.getenv('DB_NAME', 'crm_famago')
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'fecha': self.fecha.strftime('%Y-%m-%d') if self.fecha else '',
-            'cliente': self.cliente,
-            'nombre_negocio': self.nombre_negocio or '',
-            'localidad': self.localidad or '',
-            'direccion': self.direccion or '',
-            'barrio': self.barrio or '',
-            'dni': self.dni or '',
-            'es_cliente': self.es_cliente or '',
-            'detalle': self.detalle or '',
-            'interes_1': self.interes_1 or '',
-            'interes_2': self.interes_2 or '',
-            'interes_3': self.interes_3 or '',
-            'cantidad_compras': self.cantidad_compras or '',
-            'intencion_comprar': self.intencion_comprar,
-            'accion': self.accion or '',
-            'comentario': self.comentario or '',
-            'fecha_nacimiento': self.fecha_nacimiento.strftime('%Y-%m-%d') if self.fecha_nacimiento else '',
-            'años': self.años or ''
+# Conexión a MongoDB
+try:
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    clientes_collection = db['clientes']
+
+    # Crear índices para mejorar rendimiento
+    clientes_collection.create_index('cliente')
+    clientes_collection.create_index('localidad')
+    clientes_collection.create_index('intencion_comprar')
+
+    print(f"✓ Conexión exitosa a MongoDB: {DB_NAME}")
+except Exception as e:
+    print(f"✗ Error conectando a MongoDB: {e}")
+    print("  Asegúrate de que MongoDB esté corriendo en localhost:27017")
+    exit(1)
+
+def cliente_to_dict(cliente):
+    """Convierte un documento de MongoDB a diccionario con _id como string"""
+    if cliente:
+        cliente['id'] = str(cliente['_id'])
+        del cliente['_id']
+
+        # Convertir datetime a string
+        if 'fecha' in cliente and isinstance(cliente['fecha'], datetime):
+            cliente['fecha'] = cliente['fecha'].strftime('%Y-%m-%d')
+        if 'fecha_nacimiento' in cliente and isinstance(cliente['fecha_nacimiento'], datetime):
+            cliente['fecha_nacimiento'] = cliente['fecha_nacimiento'].strftime('%Y-%m-%d')
+
+        # Asegurar que todos los campos existan con valores por defecto
+        campos_default = {
+            'cliente': '',
+            'nombre_negocio': '',
+            'localidad': '',
+            'direccion': '',
+            'barrio': '',
+            'dni': '',
+            'es_cliente': '',
+            'detalle': '',
+            'interes_1': '',
+            'interes_2': '',
+            'interes_3': '',
+            'cantidad_compras': '',
+            'intencion_comprar': 'POCA',
+            'accion': '',
+            'comentario': '',
+            'años': ''
         }
 
-with app.app_context():
-    db.create_all()
+        for campo, default in campos_default.items():
+            if campo not in cliente:
+                cliente[campo] = default
+
+    return cliente
 
 @app.route('/')
 def index():
@@ -67,136 +81,175 @@ def get_clientes():
     localidad = request.args.get('localidad', '')
     intencion = request.args.get('intencion', '')
     search = request.args.get('search', '')
-    
-    query = Cliente.query
-    
+
+    # Construir filtro de MongoDB
+    filtro = {}
+
     if localidad:
-        query = query.filter(Cliente.localidad.ilike(f'%{localidad}%'))
+        filtro['localidad'] = {'$regex': localidad, '$options': 'i'}
     if intencion:
-        query = query.filter(Cliente.intencion_comprar.ilike(f'%{intencion}%'))
+        filtro['intencion_comprar'] = {'$regex': intencion, '$options': 'i'}
     if search:
-        query = query.filter(
-            db.or_(
-                Cliente.cliente.ilike(f'%{search}%'),
-                Cliente.nombre_negocio.ilike(f'%{search}%'),
-                Cliente.comentario.ilike(f'%{search}%')
-            )
-        )
-    
-    clientes = query.order_by(Cliente.fecha.desc()).all()
-    return jsonify([c.to_dict() for c in clientes])
+        filtro['$or'] = [
+            {'cliente': {'$regex': search, '$options': 'i'}},
+            {'nombre_negocio': {'$regex': search, '$options': 'i'}},
+            {'comentario': {'$regex': search, '$options': 'i'}}
+        ]
+
+    # Buscar y ordenar por fecha descendente
+    clientes = list(clientes_collection.find(filtro).sort('fecha', -1))
+
+    return jsonify([cliente_to_dict(c) for c in clientes])
 
 @app.route('/api/clientes', methods=['POST'])
 def add_cliente():
     data = request.json
-    
-    nuevo_cliente = Cliente(
-        cliente=data.get('cliente'),
-        nombre_negocio=data.get('nombre_negocio'),
-        localidad=data.get('localidad'),
-        direccion=data.get('direccion'),
-        barrio=data.get('barrio'),
-        dni=data.get('dni'),
-        es_cliente=data.get('es_cliente'),
-        detalle=data.get('detalle'),
-        interes_1=data.get('interes_1'),
-        interes_2=data.get('interes_2'),
-        interes_3=data.get('interes_3'),
-        cantidad_compras=data.get('cantidad_compras'),
-        intencion_comprar=data.get('intencion_comprar'),
-        accion=data.get('accion'),
-        comentario=data.get('comentario')
-    )
-    
+
+    # Crear nuevo documento
+    nuevo_cliente = {
+        'fecha': datetime.now(),
+        'cliente': data.get('cliente', '').strip(),
+        'nombre_negocio': data.get('nombre_negocio', '').strip() or None,
+        'localidad': data.get('localidad', '').strip() or None,
+        'direccion': data.get('direccion', '').strip() or None,
+        'barrio': data.get('barrio', '').strip() or None,
+        'dni': data.get('dni', '').strip() or None,
+        'es_cliente': data.get('es_cliente', '').strip() or None,
+        'detalle': data.get('detalle', '').strip() or None,
+        'interes_1': data.get('interes_1', '').strip() or None,
+        'interes_2': data.get('interes_2', '').strip() or None,
+        'interes_3': data.get('interes_3', '').strip() or None,
+        'cantidad_compras': data.get('cantidad_compras', '').strip() or None,
+        'intencion_comprar': data.get('intencion_comprar', 'POCA').strip().upper(),
+        'accion': data.get('accion', '').strip() or None,
+        'comentario': data.get('comentario', '').strip() or None
+    }
+
+    # Campos opcionales de fecha y edad
     if data.get('fecha_nacimiento'):
         try:
-            nuevo_cliente.fecha_nacimiento = datetime.strptime(data.get('fecha_nacimiento'), '%Y-%m-%d').date()
+            nuevo_cliente['fecha_nacimiento'] = datetime.strptime(data.get('fecha_nacimiento'), '%Y-%m-%d')
         except:
             pass
-    
+
     if data.get('años'):
         try:
-            nuevo_cliente.años = int(data.get('años'))
+            nuevo_cliente['años'] = int(data.get('años'))
         except:
             pass
-    
-    db.session.add(nuevo_cliente)
-    db.session.commit()
-    
-    return jsonify(nuevo_cliente.to_dict()), 201
 
-@app.route('/api/clientes/<int:id>', methods=['PUT'])
+    # Insertar en MongoDB
+    result = clientes_collection.insert_one(nuevo_cliente)
+    nuevo_cliente['_id'] = result.inserted_id
+
+    return jsonify(cliente_to_dict(nuevo_cliente)), 201
+
+@app.route('/api/clientes/<id>', methods=['PUT'])
 def update_cliente(id):
-    cliente = Cliente.query.get_or_404(id)
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
     data = request.json
-    
-    cliente.cliente = data.get('cliente', cliente.cliente)
-    cliente.nombre_negocio = data.get('nombre_negocio')
-    cliente.localidad = data.get('localidad')
-    cliente.direccion = data.get('direccion')
-    cliente.barrio = data.get('barrio')
-    cliente.dni = data.get('dni')
-    cliente.es_cliente = data.get('es_cliente')
-    cliente.detalle = data.get('detalle')
-    cliente.interes_1 = data.get('interes_1')
-    cliente.interes_2 = data.get('interes_2')
-    cliente.interes_3 = data.get('interes_3')
-    cliente.cantidad_compras = data.get('cantidad_compras')
-    cliente.intencion_comprar = data.get('intencion_comprar', cliente.intencion_comprar)
-    cliente.accion = data.get('accion')
-    cliente.comentario = data.get('comentario')
-    
+
+    # Construir documento de actualización
+    update_data = {}
+
+    campos = [
+        'cliente', 'nombre_negocio', 'localidad', 'direccion', 'barrio',
+        'dni', 'es_cliente', 'detalle', 'interes_1', 'interes_2', 'interes_3',
+        'cantidad_compras', 'intencion_comprar', 'accion', 'comentario'
+    ]
+
+    for campo in campos:
+        if campo in data:
+            valor = data[campo]
+            if valor is not None and str(valor).strip():
+                update_data[campo] = valor if campo != 'intencion_comprar' else valor.upper()
+            else:
+                update_data[campo] = None
+
+    # Campos especiales
     if data.get('fecha_nacimiento'):
         try:
-            cliente.fecha_nacimiento = datetime.strptime(data.get('fecha_nacimiento'), '%Y-%m-%d').date()
+            update_data['fecha_nacimiento'] = datetime.strptime(data.get('fecha_nacimiento'), '%Y-%m-%d')
         except:
             pass
-    
+
     if data.get('años'):
         try:
-            cliente.años = int(data.get('años'))
+            update_data['años'] = int(data.get('años'))
         except:
             pass
-    
-    db.session.commit()
-    return jsonify(cliente.to_dict())
 
-@app.route('/api/clientes/<int:id>', methods=['DELETE'])
+    # Actualizar en MongoDB
+    result = clientes_collection.update_one(
+        {'_id': object_id},
+        {'$set': update_data}
+    )
+
+    if result.matched_count == 0:
+        return jsonify({'error': 'Cliente no encontrado'}), 404
+
+    # Obtener cliente actualizado
+    cliente_actualizado = clientes_collection.find_one({'_id': object_id})
+    return jsonify(cliente_to_dict(cliente_actualizado))
+
+@app.route('/api/clientes/<id>', methods=['DELETE'])
 def delete_cliente(id):
-    cliente = Cliente.query.get_or_404(id)
-    db.session.delete(cliente)
-    db.session.commit()
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
+    result = clientes_collection.delete_one({'_id': object_id})
+
+    if result.deleted_count == 0:
+        return jsonify({'error': 'Cliente no encontrado'}), 404
+
     return '', 204
 
 @app.route('/api/stats')
 def get_stats():
-    total = Cliente.query.count()
-    
-    intenciones = db.session.query(
-        Cliente.intencion_comprar,
-        db.func.count(Cliente.id)
-    ).group_by(Cliente.intencion_comprar).all()
-    
+    total = clientes_collection.count_documents({})
+
+    # Agregación para contar por intención
+    pipeline = [
+        {
+            '$group': {
+                '_id': '$intencion_comprar',
+                'cantidad': {'$sum': 1}
+            }
+        }
+    ]
+
+    intenciones = list(clientes_collection.aggregate(pipeline))
+
     return jsonify({
         'total': total,
-        'por_intencion': [{'intencion': i[0], 'cantidad': i[1]} for i in intenciones]
+        'por_intencion': [
+            {'intencion': i['_id'], 'cantidad': i['cantidad']}
+            for i in intenciones
+        ]
     })
 
 @app.route('/api/import-excel', methods=['POST'])
 def import_excel():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
-    
+
     if not file.filename.endswith(('.xlsx', '.xls')):
         return jsonify({'error': 'File must be Excel format'}), 400
-    
+
     try:
         df = pd.read_excel(file)
-        
+
+        # Mapeo de columnas Excel a campos de base de datos
         column_mapping = {
             'FECHA': 'fecha',
             'CLIENTE': 'cliente',
@@ -218,96 +271,104 @@ def import_excel():
             'FECHA DE NACIMIENTO': 'fecha_nacimiento',
             'AÑOS': 'años'
         }
-        
+
         df = df.rename(columns=column_mapping)
-        
+
         imported_count = 0
+        documentos = []
+
         for _, row in df.iterrows():
+            # Validar que tenga al menos el campo cliente
             if pd.isna(row.get('cliente')) or not str(row.get('cliente')).strip():
                 continue
-                
-            cliente = Cliente(
-                cliente=str(row.get('cliente', '')).strip(),
-                nombre_negocio=str(row.get('nombre_negocio', '')) if pd.notna(row.get('nombre_negocio')) else None,
-                localidad=str(row.get('localidad', '')) if pd.notna(row.get('localidad')) else None,
-                direccion=str(row.get('direccion', '')) if pd.notna(row.get('direccion')) else None,
-                barrio=str(row.get('barrio', '')) if pd.notna(row.get('barrio')) else None,
-                dni=str(row.get('dni', '')) if pd.notna(row.get('dni')) else None,
-                es_cliente=str(row.get('es_cliente', '')) if pd.notna(row.get('es_cliente')) else None,
-                detalle=str(row.get('detalle', '')) if pd.notna(row.get('detalle')) else None,
-                interes_1=str(row.get('interes_1', '')) if pd.notna(row.get('interes_1')) else None,
-                interes_2=str(row.get('interes_2', '')) if pd.notna(row.get('interes_2')) else None,
-                interes_3=str(row.get('interes_3', '')) if pd.notna(row.get('interes_3')) else None,
-                cantidad_compras=str(row.get('cantidad_compras', '')) if pd.notna(row.get('cantidad_compras')) else None,
-                intencion_comprar=str(row.get('intencion_comprar', 'POCA')).strip().upper(),
-                accion=str(row.get('accion', '')) if pd.notna(row.get('accion')) else None,
-                comentario=str(row.get('comentario', '')) if pd.notna(row.get('comentario')) else None
-            )
-            
+
+            documento = {
+                'cliente': str(row.get('cliente', '')).strip(),
+                'nombre_negocio': str(row.get('nombre_negocio', '')) if pd.notna(row.get('nombre_negocio')) else None,
+                'localidad': str(row.get('localidad', '')) if pd.notna(row.get('localidad')) else None,
+                'direccion': str(row.get('direccion', '')) if pd.notna(row.get('direccion')) else None,
+                'barrio': str(row.get('barrio', '')) if pd.notna(row.get('barrio')) else None,
+                'dni': str(row.get('dni', '')) if pd.notna(row.get('dni')) else None,
+                'es_cliente': str(row.get('es_cliente', '')) if pd.notna(row.get('es_cliente')) else None,
+                'detalle': str(row.get('detalle', '')) if pd.notna(row.get('detalle')) else None,
+                'interes_1': str(row.get('interes_1', '')) if pd.notna(row.get('interes_1')) else None,
+                'interes_2': str(row.get('interes_2', '')) if pd.notna(row.get('interes_2')) else None,
+                'interes_3': str(row.get('interes_3', '')) if pd.notna(row.get('interes_3')) else None,
+                'cantidad_compras': str(row.get('cantidad_compras', '')) if pd.notna(row.get('cantidad_compras')) else None,
+                'intencion_comprar': str(row.get('intencion_comprar', 'POCA')).strip().upper(),
+                'accion': str(row.get('accion', '')) if pd.notna(row.get('accion')) else None,
+                'comentario': str(row.get('comentario', '')) if pd.notna(row.get('comentario')) else None
+            }
+
+            # Fecha de registro
             if pd.notna(row.get('fecha')):
                 try:
-                    cliente.fecha = pd.to_datetime(row['fecha'])
+                    documento['fecha'] = pd.to_datetime(row['fecha']).to_pydatetime()
                 except:
-                    cliente.fecha = datetime.now()
+                    documento['fecha'] = datetime.now()
             else:
-                cliente.fecha = datetime.now()
-            
+                documento['fecha'] = datetime.now()
+
+            # Fecha de nacimiento
             if pd.notna(row.get('fecha_nacimiento')):
                 try:
-                    cliente.fecha_nacimiento = pd.to_datetime(row['fecha_nacimiento']).date()
+                    documento['fecha_nacimiento'] = pd.to_datetime(row['fecha_nacimiento']).to_pydatetime()
                 except:
                     pass
-            
+
+            # Edad
             if pd.notna(row.get('años')):
                 try:
-                    cliente.años = int(row['años'])
+                    documento['años'] = int(row['años'])
                 except:
                     pass
-            
-            db.session.add(cliente)
+
+            documentos.append(documento)
             imported_count += 1
-        
-        db.session.commit()
+
+        # Insertar todos los documentos en MongoDB
+        if documentos:
+            clientes_collection.insert_many(documentos)
+
         return jsonify({'message': f'{imported_count} clientes importados correctamente'})
-    
+
     except Exception as e:
-        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/export-excel')
 def export_excel():
-    clientes = Cliente.query.all()
-    
+    clientes = list(clientes_collection.find())
+
     data = []
     for c in clientes:
         data.append({
-            'FECHA': c.fecha.strftime('%Y-%m-%d') if c.fecha else '',
-            'CLIENTE': c.cliente,
-            'NOMBRE NEGOCIO': c.nombre_negocio or '',
-            'LOCALIDAD': c.localidad or '',
-            'DIRECCION': c.direccion or '',
-            'BARRIO': c.barrio or '',
-            'DNI': c.dni or '',
-            'ES CLIENTE?': c.es_cliente or '',
-            'DETALLE': c.detalle or '',
-            'INTERES 1': c.interes_1 or '',
-            'INTERES 2': c.interes_2 or '',
-            'INTERES 3': c.interes_3 or '',
-            'CANTIDAD COMPRAS': c.cantidad_compras or '',
-            'INTENCION DE COMPRAR': c.intencion_comprar,
-            'ACCION': c.accion or '',
-            'COMENTARIO': c.comentario or '',
-            'FECHA DE NACIMIENTO': c.fecha_nacimiento.strftime('%Y-%m-%d') if c.fecha_nacimiento else '',
-            'AÑOS': c.años or ''
+            'FECHA': c.get('fecha').strftime('%Y-%m-%d') if c.get('fecha') else '',
+            'CLIENTE': c.get('cliente', ''),
+            'NOMBRE NEGOCIO': c.get('nombre_negocio', ''),
+            'LOCALIDAD': c.get('localidad', ''),
+            'DIRECCION': c.get('direccion', ''),
+            'BARRIO': c.get('barrio', ''),
+            'DNI': c.get('dni', ''),
+            'ES CLIENTE?': c.get('es_cliente', ''),
+            'DETALLE': c.get('detalle', ''),
+            'INTERES 1': c.get('interes_1', ''),
+            'INTERES 2': c.get('interes_2', ''),
+            'INTERES 3': c.get('interes_3', ''),
+            'CANTIDAD COMPRAS': c.get('cantidad_compras', ''),
+            'INTENCION DE COMPRAR': c.get('intencion_comprar', ''),
+            'ACCION': c.get('accion', ''),
+            'COMENTARIO': c.get('comentario', ''),
+            'FECHA DE NACIMIENTO': c.get('fecha_nacimiento').strftime('%Y-%m-%d') if c.get('fecha_nacimiento') else '',
+            'AÑOS': c.get('años', '')
         })
-    
+
     df = pd.DataFrame(data)
-    
+
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Clientes')
     output.seek(0)
-    
+
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -317,8 +378,25 @@ def export_excel():
 
 @app.route('/api/localidades')
 def get_localidades():
-    localidades = db.session.query(Cliente.localidad).distinct().filter(Cliente.localidad.isnot(None)).all()
-    return jsonify([l[0] for l in localidades if l[0]])
+    # Obtener localidades únicas usando aggregation
+    pipeline = [
+        {
+            '$match': {
+                'localidad': {'$ne': None, '$ne': ''}
+            }
+        },
+        {
+            '$group': {
+                '_id': '$localidad'
+            }
+        },
+        {
+            '$sort': {'_id': 1}
+        }
+    ]
+
+    localidades = list(clientes_collection.aggregate(pipeline))
+    return jsonify([l['_id'] for l in localidades])
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
