@@ -144,6 +144,21 @@ def add_cliente():
 
     return jsonify(cliente_to_dict(nuevo_cliente)), 201
 
+@app.route('/api/clientes/<id>', methods=['GET'])
+def get_cliente(id):
+    """Obtener un cliente específico por ID"""
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
+    cliente = clientes_collection.find_one({'_id': object_id})
+
+    if not cliente:
+        return jsonify({'error': 'Cliente no encontrado'}), 404
+
+    return jsonify(cliente_to_dict(cliente))
+
 @app.route('/api/clientes/<id>', methods=['PUT'])
 def update_cliente(id):
     try:

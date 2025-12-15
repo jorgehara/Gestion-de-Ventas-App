@@ -888,8 +888,8 @@
                         <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.comentario || '-'}</td>
                         <td>
                             <div class="actions">
-                                <button class="btn-icon btn-edit" onclick="editCliente(${c.id})" title="Editar">✏️</button>
-                                <button class="btn-icon btn-delete" onclick="deleteCliente(${c.id})" title="Eliminar">🗑️</button>
+                                <button class="btn-icon btn-edit" onclick="editCliente('${c.id}')" title="Editar">✏️</button>
+                                <button class="btn-icon btn-delete" onclick="deleteCliente('${c.id}')" title="Eliminar">🗑️</button>
                             </div>
                         </td>
                     </tr>
@@ -948,28 +948,31 @@
         // Edit Cliente
         async function editCliente(id) {
             try {
-                const response = await fetch(`/api/clientes?search=`);
-                const clientes = await response.json();
-                const cliente = clientes.find(c => c.id === id);
-                
-                if (!cliente) return;
+                const response = await fetch(`/api/clientes/${id}`);
+
+                if (!response.ok) {
+                    alert('Error al cargar el cliente');
+                    return;
+                }
+
+                const cliente = await response.json();
                 
                 document.getElementById('edit-id').value = cliente.id;
-                document.getElementById('edit-cliente').value = cliente.cliente;
-                document.getElementById('edit-nombre_negocio').value = cliente.nombre_negocio;
-                document.getElementById('edit-localidad').value = cliente.localidad;
-                document.getElementById('edit-direccion').value = cliente.direccion;
-                document.getElementById('edit-barrio').value = cliente.barrio;
-                document.getElementById('edit-dni').value = cliente.dni;
-                document.getElementById('edit-es_cliente').value = cliente.es_cliente;
-                document.getElementById('edit-cantidad_compras').value = cliente.cantidad_compras;
-                document.getElementById('edit-intencion_comprar').value = cliente.intencion_comprar;
-                document.getElementById('edit-interes_1').value = cliente.interes_1;
-                document.getElementById('edit-interes_2').value = cliente.interes_2;
-                document.getElementById('edit-interes_3').value = cliente.interes_3;
-                document.getElementById('edit-detalle').value = cliente.detalle;
-                document.getElementById('edit-accion').value = cliente.accion;
-                document.getElementById('edit-comentario').value = cliente.comentario;
+                document.getElementById('edit-cliente').value = cliente.cliente || '';
+                document.getElementById('edit-nombre_negocio').value = cliente.nombre_negocio || '';
+                document.getElementById('edit-localidad').value = cliente.localidad || '';
+                document.getElementById('edit-direccion').value = cliente.direccion || '';
+                document.getElementById('edit-barrio').value = cliente.barrio || '';
+                document.getElementById('edit-dni').value = cliente.dni || '';
+                document.getElementById('edit-es_cliente').value = cliente.es_cliente || '';
+                document.getElementById('edit-cantidad_compras').value = cliente.cantidad_compras || '';
+                document.getElementById('edit-intencion_comprar').value = cliente.intencion_comprar || 'POCA';
+                document.getElementById('edit-interes_1').value = cliente.interes_1 || '';
+                document.getElementById('edit-interes_2').value = cliente.interes_2 || '';
+                document.getElementById('edit-interes_3').value = cliente.interes_3 || '';
+                document.getElementById('edit-detalle').value = cliente.detalle || '';
+                document.getElementById('edit-accion').value = cliente.accion || '';
+                document.getElementById('edit-comentario').value = cliente.comentario || '';
                 
                 document.getElementById('edit-modal').classList.add('active');
             } catch (error) {
