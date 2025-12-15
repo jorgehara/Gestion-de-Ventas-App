@@ -9,7 +9,10 @@
       "Bash(python read_calculos.py:*)",
       "Bash(python analyze_calculos.py:*)",
       "Bash(find:*)",
-      "Bash(python test_calculos.py:*)"
+      "Bash(python test_calculos.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python app.py:*)",
+      "Bash(net start MongoDB)"
     ]
   }
 }

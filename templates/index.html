@@ -673,13 +673,17 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <h3>📦 Productos</h3>
                     <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-secondary" onclick="document.getElementById('productos-pdf-file').click()">
+                            📄 Importar PDF
+                        </button>
                         <button class="btn btn-secondary" onclick="document.getElementById('productos-excel-file').click()">
-                            📥 Importar Lista de Precios
+                            📥 Importar Excel
                         </button>
                         <button class="btn btn-primary" onclick="mostrarModalNuevoProducto()">
                             ➕ Nuevo Producto
                         </button>
                     </div>
+                    <input type="file" id="productos-pdf-file" accept=".pdf" style="display: none;">
                     <input type="file" id="productos-excel-file" accept=".xlsx,.xls" style="display: none;">
                 </div>
 
@@ -1476,6 +1480,49 @@
                 alert('Error al calcular precio');
             }
         }
+
+        // Importar productos desde PDF
+        document.getElementById('productos-pdf-file').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const messageDiv = document.getElementById('productos-message');
+            messageDiv.innerHTML = '<div class="alert alert-success">📄 Procesando PDF... Esto puede tardar un momento.</div>';
+
+            try {
+                const response = await fetch('/api/import-productos-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const stats = data.stats;
+                    let mensaje = `✓ Importación completada:<br>`;
+                    mensaje += `• ${stats.creados} productos nuevos creados<br>`;
+                    mensaje += `• ${stats.actualizados} productos actualizados<br>`;
+                    mensaje += `• ${stats.sin_cambios} sin cambios<br>`;
+                    if (stats.errores > 0) {
+                        mensaje += `• ${stats.errores} errores`;
+                    }
+                    messageDiv.innerHTML = `<div class="alert alert-success">${mensaje}</div>`;
+                    setTimeout(() => {
+                        messageDiv.innerHTML = '';
+                        e.target.value = '';
+                    }, 5000);
+                    loadProductos();
+                } else {
+                    messageDiv.innerHTML = `<div class="alert alert-error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                messageDiv.innerHTML = `<div class="alert alert-error">Error al importar PDF: ${error.message}</div>`;
+            }
+        });
 
         // Importar productos desde Excel
         document.getElementById('productos-excel-file').addEventListener('change', async (e) => {

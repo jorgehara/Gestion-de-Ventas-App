@@ -733,5 +733,183 @@ def import_productos_excel():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/import-productos-pdf', methods=['POST'])
+def import_productos_pdf():
+    """
+    Importa/actualiza productos desde PDF de lista de precios
+    """
+    import pdfplumber
+    import re
+
+    def calcular_precios_por_dia_local(precio_lista):
+        """Calcula los precios por día según las fórmulas de recargo"""
+        return {
+            '42': round((precio_lista * 1.23) / 42, 3),
+            '84': round((precio_lista * 1.42) / 84, 3),
+            '135': round((precio_lista * 1.58) / 135, 3),
+            '175': round((precio_lista * 1.75) / 175, 3),
+            '220': round((precio_lista * 1.92) / 220, 3)
+        }
+
+    def limpiar_numero(texto):
+        """Limpia y convierte texto a número"""
+        if not texto or texto.strip() == '':
+            return None
+        texto = texto.strip().replace('.', '').replace(',', '.')
+        try:
+            return float(texto)
+        except:
+            return None
+
+    def extraer_codigo(texto):
+        """Extrae código del producto"""
+        if not texto:
+            return None
+        match = re.search(r'\(([^\)]+)\)|^(\d+)', texto.strip())
+        if match:
+            return match.group(1) or match.group(2)
+        return None
+
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No se envió ningún archivo'}), 400
+
+        file = request.files['file']
+
+        if file.filename == '':
+            return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
+
+        if not file.filename.endswith('.pdf'):
+            return jsonify({'error': 'El archivo debe ser un PDF'}), 400
+
+        # Guardar temporalmente el PDF
+        temp_path = os.path.join('uploads', file.filename)
+        os.makedirs('uploads', exist_ok=True)
+        file.save(temp_path)
+
+        # Procesar PDF
+        productos_procesados = []
+
+        with pdfplumber.open(temp_path) as pdf:
+            for page in pdf.pages:
+                table = page.extract_table()
+
+                if not table:
+                    continue
+
+                # Buscar encabezado
+                header_idx = None
+                for idx, row in enumerate(table):
+                    if row and any('Producto' in str(cell) for cell in row if cell):
+                        header_idx = idx
+                        break
+
+                if header_idx is None:
+                    continue
+
+                # Procesar filas
+                for row in table[header_idx + 1:]:
+                    if not row or len(row) < 2:
+                        continue
+
+                    producto_col = row[0]
+                    lista_col = row[1] if len(row) > 1 else None
+
+                    if not producto_col or not lista_col:
+                        continue
+
+                    if 'Categoría:' in str(producto_col) or 'Línea:' in str(producto_col):
+                        continue
+
+                    codigo = extraer_codigo(producto_col)
+                    nombre = producto_col
+
+                    if codigo:
+                        nombre = re.sub(r'\([^\)]+\)\s*', '', nombre).strip()
+                        nombre = re.sub(r'^\d+\s+', '', nombre).strip()
+
+                    precio_lista = limpiar_numero(lista_col)
+
+                    if not nombre or not precio_lista or precio_lista <= 0:
+                        continue
+
+                    productos_procesados.append({
+                        'codigo': codigo,
+                        'nombre': nombre,
+                        'precio_lista': precio_lista
+                    })
+
+        # Eliminar archivo temporal
+        os.remove(temp_path)
+
+        # Importar/actualizar en MongoDB
+        stats = {
+            'creados': 0,
+            'actualizados': 0,
+            'errores': 0,
+            'sin_cambios': 0
+        }
+
+        for producto in productos_procesados:
+            try:
+                codigo = producto.get('codigo')
+                nombre = producto['nombre']
+                precio_lista = producto['precio_lista']
+
+                precios_por_dia = calcular_precios_por_dia_local(precio_lista)
+
+                # Buscar producto existente
+                query = {}
+                if codigo:
+                    query = {'codigo': codigo}
+                else:
+                    query = {'nombre': {'$regex': f'^{re.escape(nombre)}$', '$options': 'i'}}
+
+                producto_existente = productos_collection.find_one(query)
+
+                if producto_existente:
+                    # Actualizar solo si cambió el precio
+                    if producto_existente.get('precio_lista') != precio_lista:
+                        productos_collection.update_one(
+                            {'_id': producto_existente['_id']},
+                            {
+                                '$set': {
+                                    'precio_lista': precio_lista,
+                                    'precios_por_dia': precios_por_dia,
+                                    'fecha_actualizacion': datetime.now()
+                                }
+                            }
+                        )
+                        stats['actualizados'] += 1
+                    else:
+                        stats['sin_cambios'] += 1
+                else:
+                    # Crear nuevo producto
+                    nuevo_producto = {
+                        'codigo': codigo,
+                        'nombre': nombre,
+                        'precio_lista': precio_lista,
+                        'precios_por_dia': precios_por_dia,
+                        'fecha_creacion': datetime.now(),
+                        'fecha_actualizacion': datetime.now(),
+                        'activo': True
+                    }
+                    productos_collection.insert_one(nuevo_producto)
+                    stats['creados'] += 1
+
+            except Exception as e:
+                stats['errores'] += 1
+                print(f"Error procesando producto: {e}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Importación completada',
+            'stats': stats,
+            'total_procesados': len(productos_procesados)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
