@@ -10,7 +10,7 @@ echo "🔄 CRM Famago - Script de Actualización"
 echo "=================================="
 echo ""
 
-SERVICE_NAME="crm-famago"
+SERVICE_NAME="gestion-ventas"
 
 # Colores
 GREEN='\033[0;32m'
@@ -34,7 +34,13 @@ fi
 print_info "Iniciando actualización..."
 echo ""
 
-# 1. Backup de base de datos
+# 1. Descargar últimos cambios del repositorio
+print_info "Descargando últimos cambios desde Git..."
+git pull origin main
+print_success "Código actualizado"
+echo ""
+
+# 2. Backup de base de datos (opcional pero recomendado)
 print_info "Creando backup de MongoDB..."
 BACKUP_DIR="./backups"
 mkdir -p $BACKUP_DIR
@@ -48,14 +54,14 @@ else
 fi
 echo ""
 
-# 2. Actualizar dependencias
+# 3. Actualizar dependencias
 print_info "Actualizando dependencias..."
 source venv/bin/activate
 pip install -r requirements.txt --quiet --upgrade
 print_success "Dependencias actualizadas"
 echo ""
 
-# 3. Reiniciar servicio
+# 4. Reiniciar servicio
 print_info "Reiniciando servicio..."
 sudo systemctl restart $SERVICE_NAME
 sleep 2
@@ -69,7 +75,7 @@ else
 fi
 echo ""
 
-# 4. Limpiar caché
+# 5. Limpiar caché
 print_info "Limpiando caché de Python..."
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -type f -name "*.pyc" -delete 2>/dev/null || true
