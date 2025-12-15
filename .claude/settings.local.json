@@ -12,7 +12,10 @@
       "Bash(python test_calculos.py:*)",
       "Bash(pip install:*)",
       "Bash(python app.py:*)",
-      "Bash(net start MongoDB)"
+      "Bash(net start MongoDB)",
+      "Bash(netstat:*)",
+      "Bash(python analyze_excel.py:*)",
+      "Bash(python import_productos_excel.py:*)"
     ]
   }
 }
