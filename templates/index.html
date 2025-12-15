@@ -517,6 +517,7 @@
             <button class="tab active" onclick="showTab('dashboard')">📊 Dashboard</button>
             <button class="tab" onclick="showTab('clientes')">👥 Clientes</button>
             <button class="tab" onclick="showTab('nuevo')">➕ Nuevo Cliente</button>
+            <button class="tab" onclick="showTab('calculos')">💰 Cálculos</button>
             <button class="tab" onclick="showTab('importar')">📥 Importar/Exportar</button>
         </div>
 
@@ -665,6 +666,101 @@
             </form>
         </div>
 
+        <!-- Calculos Tab -->
+        <div id="calculos-tab" class="tab-content">
+            <!-- Sección de Gestión de Productos -->
+            <div style="margin-bottom: 40px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h3>📦 Productos</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-secondary" onclick="document.getElementById('productos-excel-file').click()">
+                            📥 Importar Lista de Precios
+                        </button>
+                        <button class="btn btn-primary" onclick="mostrarModalNuevoProducto()">
+                            ➕ Nuevo Producto
+                        </button>
+                    </div>
+                    <input type="file" id="productos-excel-file" accept=".xlsx,.xls" style="display: none;">
+                </div>
+
+                <div id="productos-message"></div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Producto</th>
+                                <th>Precio Lista</th>
+                                <th>42 días</th>
+                                <th>84 días</th>
+                                <th>135 días</th>
+                                <th>175 días</th>
+                                <th>220 días</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productos-table">
+                            <!-- Data will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Calculadora de Precios -->
+            <div style="background: var(--gray-50); padding: 30px; border-radius: 12px;">
+                <h3 style="margin-bottom: 24px;">🧮 Calculadora de Precios</h3>
+
+                <div class="form-grid" style="margin-bottom: 24px;">
+                    <div class="form-group">
+                        <label>Producto</label>
+                        <select id="calc-producto" onchange="mostrarPreciosProducto()">
+                            <option value="">Seleccionar producto...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Plan de Pago</label>
+                        <select id="calc-plan" onchange="calcularPrecio()">
+                            <option value="">Seleccionar plan...</option>
+                            <option value="contado_efectivo">Contado Efectivo</option>
+                            <option value="42_dias">42 Días</option>
+                            <option value="84_dias">84 Días</option>
+                            <option value="135_dias">135 Días</option>
+                            <option value="175_dias">175 Días</option>
+                            <option value="220_dias">220 Días</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Resultado del Cálculo -->
+                <div id="calculo-resultado" style="display: none;">
+                    <div style="background: white; padding: 24px; border-radius: 12px; border: 2px solid var(--primary);">
+                        <h4 style="color: var(--primary); margin-bottom: 20px;">Resultado del Cálculo</h4>
+
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                            <div>
+                                <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">Producto</div>
+                                <div style="font-size: 18px; font-weight: 600;" id="resultado-producto"></div>
+                            </div>
+                            <div>
+                                <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">Plan Seleccionado</div>
+                                <div style="font-size: 18px; font-weight: 600;" id="resultado-plan"></div>
+                            </div>
+                        </div>
+
+                        <div style="border-top: 2px solid var(--gray-200); padding-top: 20px; margin-top: 20px;">
+                            <div id="resultado-desglose"></div>
+                        </div>
+
+                        <div style="background: linear-gradient(135deg, var(--success) 0%, #059669 100%); color: white; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                            <div style="font-size: 16px; margin-bottom: 8px; opacity: 0.9;">PRECIO FINAL</div>
+                            <div style="font-size: 36px; font-weight: 700;" id="resultado-total"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Importar Tab -->
         <div id="importar-tab" class="tab-content">
             <div style="margin-bottom: 40px;">
@@ -690,6 +786,38 @@
                     Descargar Excel
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal para Producto -->
+    <div id="producto-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="producto-modal-title">Nuevo Producto</h2>
+                <button class="close-btn" onclick="closeProductoModal()">&times;</button>
+            </div>
+            <form id="producto-form">
+                <input type="hidden" id="producto-id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Código</label>
+                        <input type="text" id="producto-codigo">
+                    </div>
+                    <div class="form-group">
+                        <label>Nombre del Producto *</label>
+                        <input type="text" id="producto-nombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Precio de Lista *</label>
+                        <input type="number" id="producto-precio" step="0.01" required>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeProductoModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1085,6 +1213,312 @@
         function exportarExcel() {
             window.location.href = '/api/export-excel';
         }
+
+        // ==========================================
+        // FUNCIONES PARA PRODUCTOS Y CALCULOS
+        // ==========================================
+
+        let productosData = [];
+
+        // Cargar productos
+        async function loadProductos() {
+            try {
+                const response = await fetch('/api/productos');
+                productosData = await response.json();
+
+                const tbody = document.getElementById('productos-table');
+
+                if (productosData.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="9" class="empty-state">
+                                <div>No hay productos. Importa la lista de precios o crea uno nuevo.</div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = productosData.map(p => `
+                    <tr>
+                        <td>${p.codigo || '-'}</td>
+                        <td><strong>${p.nombre}</strong></td>
+                        <td>$${Number(p.precio_lista).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td>$${Number(p.precios_por_dia['42']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td>$${Number(p.precios_por_dia['84']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td>$${Number(p.precios_por_dia['135']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td>$${Number(p.precios_por_dia['175']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td>$${Number(p.precios_por_dia['220']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-icon btn-edit" onclick="editarProducto('${p.id}')" title="Editar">✏️</button>
+                                <button class="btn-icon btn-delete" onclick="eliminarProducto('${p.id}')" title="Eliminar">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Actualizar selector de calculadora
+                const selectProducto = document.getElementById('calc-producto');
+                selectProducto.innerHTML = '<option value="">Seleccionar producto...</option>';
+                productosData.forEach(p => {
+                    selectProducto.innerHTML += `<option value="${p.id}">${p.nombre} - $${Number(p.precio_lista).toLocaleString('es-AR')}</option>`;
+                });
+
+            } catch (error) {
+                console.error('Error loading productos:', error);
+            }
+        }
+
+        // Modal Nuevo Producto
+        function mostrarModalNuevoProducto() {
+            document.getElementById('producto-modal-title').textContent = 'Nuevo Producto';
+            document.getElementById('producto-form').reset();
+            document.getElementById('producto-id').value = '';
+            document.getElementById('producto-modal').classList.add('active');
+        }
+
+        function closeProductoModal() {
+            document.getElementById('producto-modal').classList.remove('active');
+        }
+
+        // Guardar Producto
+        document.getElementById('producto-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const id = document.getElementById('producto-id').value;
+            const data = {
+                codigo: document.getElementById('producto-codigo').value,
+                nombre: document.getElementById('producto-nombre').value,
+                precio_lista: document.getElementById('producto-precio').value
+            };
+
+            try {
+                const url = id ? `/api/productos/${id}` : '/api/productos';
+                const method = id ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    alert(id ? 'Producto actualizado' : 'Producto creado');
+                    closeProductoModal();
+                    loadProductos();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al guardar producto');
+            }
+        });
+
+        // Editar Producto
+        async function editarProducto(id) {
+            try {
+                const response = await fetch(`/api/productos/${id}`);
+                if (!response.ok) {
+                    alert('Error al cargar el producto');
+                    return;
+                }
+
+                const producto = await response.json();
+
+                document.getElementById('producto-modal-title').textContent = 'Editar Producto';
+                document.getElementById('producto-id').value = producto.id;
+                document.getElementById('producto-codigo').value = producto.codigo || '';
+                document.getElementById('producto-nombre').value = producto.nombre || '';
+                document.getElementById('producto-precio').value = producto.precio_lista || '';
+
+                document.getElementById('producto-modal').classList.add('active');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Eliminar Producto
+        async function eliminarProducto(id) {
+            if (!confirm('¿Estás seguro de eliminar este producto?')) return;
+
+            try {
+                const response = await fetch(`/api/productos/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Producto eliminado');
+                    loadProductos();
+                } else {
+                    alert('Error al eliminar producto');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al eliminar producto');
+            }
+        }
+
+        // Mostrar precios del producto seleccionado
+        function mostrarPreciosProducto() {
+            const productoId = document.getElementById('calc-producto').value;
+            if (!productoId) {
+                document.getElementById('calculo-resultado').style.display = 'none';
+                return;
+            }
+            // Si hay plan seleccionado, calcular
+            const plan = document.getElementById('calc-plan').value;
+            if (plan) {
+                calcularPrecio();
+            }
+        }
+
+        // Calcular Precio
+        async function calcularPrecio() {
+            const productoId = document.getElementById('calc-producto').value;
+            const plan = document.getElementById('calc-plan').value;
+
+            if (!productoId || !plan) {
+                document.getElementById('calculo-resultado').style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/calcular', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        producto_id: productoId,
+                        plan: plan
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                    return;
+                }
+
+                const resultado = await response.json();
+
+                // Mostrar resultado
+                document.getElementById('resultado-producto').textContent = resultado.producto.nombre;
+
+                const planNames = {
+                    'contado_efectivo': 'Contado Efectivo',
+                    '42_dias': '42 Días',
+                    '84_dias': '84 Días',
+                    '135_dias': '135 Días',
+                    '175_dias': '175 Días',
+                    '220_dias': '220 Días'
+                };
+                document.getElementById('resultado-plan').textContent = planNames[plan];
+
+                let desgloseHTML = '';
+
+                if (resultado.tipo === 'contado') {
+                    desgloseHTML = `
+                        <div style="display: grid; gap: 12px;">
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>Precio de Lista:</span>
+                                <strong>$${Number(resultado.precio_base).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; color: var(--danger);">
+                                <span>Descuento:</span>
+                                <strong>-${resultado.descuento_porcentaje}%</strong>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    desgloseHTML = `
+                        <div style="display: grid; gap: 12px;">
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>Precio de Lista:</span>
+                                <strong>$${Number(resultado.precio_base).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; color: var(--warning);">
+                                <span>Recargo por Financiación:</span>
+                                <strong>+${resultado.recargo_porcentaje}%</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>Precio con Recargo:</span>
+                                <strong>$${Number(resultado.precio_con_recargo).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>Precio por Día (sin descuento):</span>
+                                <strong>$${Number(resultado.precio_por_dia_sin_descuento).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; color: var(--danger);">
+                                <span>Descuento aplicado:</span>
+                                <strong>-${resultado.descuento_porcentaje}%</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-top: 2px solid var(--gray-200); padding-top: 12px;">
+                                <span style="font-size: 16px;">Precio por Día Final:</span>
+                                <strong style="font-size: 18px; color: var(--primary);">$${Number(resultado.precio_por_dia_final).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+                                <span>Cantidad de Días:</span>
+                                <strong>${resultado.dias} días</strong>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                document.getElementById('resultado-desglose').innerHTML = desgloseHTML;
+                document.getElementById('resultado-total').textContent = '$' + Number(resultado.total).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                document.getElementById('calculo-resultado').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al calcular precio');
+            }
+        }
+
+        // Importar productos desde Excel
+        document.getElementById('productos-excel-file').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const messageDiv = document.getElementById('productos-message');
+            messageDiv.innerHTML = '<div class="alert alert-success">Importando productos...</div>';
+
+            try {
+                const response = await fetch('/api/import-productos-excel', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+                    setTimeout(() => {
+                        messageDiv.innerHTML = '';
+                        e.target.value = '';
+                    }, 3000);
+                    loadProductos();
+                } else {
+                    messageDiv.innerHTML = `<div class="alert alert-error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="alert alert-error">Error al importar archivo</div>`;
+            }
+        });
+
+        // Actualizar showTab para cargar productos
+        const originalShowTab = showTab;
+        showTab = function(tabName) {
+            originalShowTab(tabName);
+            if (tabName === 'calculos') {
+                loadProductos();
+            }
+        };
 
         // Initial Load
         loadStats();

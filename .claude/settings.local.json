@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(findstr:*)",
-      "Bash(dir /b index.html)"
+      "Bash(dir /b index.html)",
+      "Bash(dir:*)",
+      "Bash(python3:*)",
+      "Bash(python -c:*)",
+      "Bash(python read_calculos.py:*)",
+      "Bash(python analyze_calculos.py:*)",
+      "Bash(find:*)",
+      "Bash(python test_calculos.py:*)"
     ]
   }
 }

@@ -22,11 +22,15 @@ try:
     client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
     clientes_collection = db['clientes']
+    productos_collection = db['productos']
+    planes_descuento_collection = db['planes_descuento']
 
     # Crear índices para mejorar rendimiento
     clientes_collection.create_index('cliente')
     clientes_collection.create_index('localidad')
     clientes_collection.create_index('intencion_comprar')
+    productos_collection.create_index('codigo')
+    productos_collection.create_index('nombre')
 
     print(f"✓ Conexión exitosa a MongoDB: {DB_NAME}")
 except Exception as e:
@@ -412,6 +416,322 @@ def get_localidades():
 
     localidades = list(clientes_collection.aggregate(pipeline))
     return jsonify([l['_id'] for l in localidades])
+
+# ==========================================
+# ENDPOINTS PARA PRODUCTOS Y CALCULOS
+# ==========================================
+
+def producto_to_dict(producto):
+    """Convierte un documento de producto de MongoDB a diccionario con _id como string"""
+    if producto:
+        producto['id'] = str(producto['_id'])
+        del producto['_id']
+
+        if 'fecha_actualizacion' in producto and isinstance(producto['fecha_actualizacion'], datetime):
+            producto['fecha_actualizacion'] = producto['fecha_actualizacion'].strftime('%Y-%m-%d %H:%M:%S')
+
+    return producto
+
+def calcular_precios_por_dia(precio_lista):
+    """Calcula los precios por día según las fórmulas de recargo"""
+    return {
+        '42': round((precio_lista * 1.23) / 42, 3),
+        '84': round((precio_lista * 1.42) / 84, 3),
+        '135': round((precio_lista * 1.58) / 135, 3),
+        '175': round((precio_lista * 1.75) / 175, 3),
+        '220': round((precio_lista * 1.92) / 220, 3)
+    }
+
+def calcular_precio_final(precio_lista, plan):
+    """
+    Calcula el precio final según el plan seleccionado
+
+    Args:
+        precio_lista: Precio base del producto
+        plan: Nombre del plan (ej: 'contado_efectivo', '42_dias', etc.)
+
+    Returns:
+        Dict con el desglose completo del cálculo
+    """
+    # Tabla de descuentos según planes
+    descuentos = {
+        'contado_efectivo': 34.39,
+        '42_dias': 30.75,
+        '84_dias': 27.1,
+        '135_dias': 27.1,
+        '175_dias': 27.1,
+        '220_dias': 27.1
+    }
+
+    # Tabla de recargos por financiación
+    recargos = {
+        42: 23,
+        84: 42,
+        135: 58,
+        175: 75,
+        220: 92
+    }
+
+    if plan == 'contado_efectivo':
+        descuento_porcentaje = descuentos['contado_efectivo']
+        precio_final = precio_lista * (1 - descuento_porcentaje / 100)
+
+        return {
+            'tipo': 'contado',
+            'precio_base': round(precio_lista, 2),
+            'descuento_porcentaje': descuento_porcentaje,
+            'precio_final': round(precio_final, 2),
+            'cuota': None,
+            'dias': None,
+            'total': round(precio_final, 2)
+        }
+    else:
+        # Extraer días del nombre del plan
+        dias = int(plan.split('_')[0])
+
+        # Calcular precio por día
+        recargo_porcentaje = recargos[dias]
+        precio_con_recargo = precio_lista * (1 + recargo_porcentaje / 100)
+        precio_por_dia = precio_con_recargo / dias
+
+        # Aplicar descuento
+        descuento_porcentaje = descuentos[plan]
+        precio_por_dia_final = precio_por_dia * (1 - descuento_porcentaje / 100)
+        total = precio_por_dia_final * dias
+
+        return {
+            'tipo': 'financiado',
+            'precio_base': round(precio_lista, 2),
+            'recargo_porcentaje': recargo_porcentaje,
+            'precio_con_recargo': round(precio_con_recargo, 2),
+            'precio_por_dia_sin_descuento': round(precio_por_dia, 3),
+            'descuento_porcentaje': descuento_porcentaje,
+            'precio_por_dia_final': round(precio_por_dia_final, 3),
+            'dias': dias,
+            'total': round(total, 2)
+        }
+
+# ENDPOINTS PRODUCTOS
+
+@app.route('/api/productos', methods=['GET'])
+def get_productos():
+    """Obtener todos los productos"""
+    try:
+        productos = list(productos_collection.find({'activo': True}).sort('nombre', 1))
+        return jsonify([producto_to_dict(p) for p in productos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/productos/<id>', methods=['GET'])
+def get_producto(id):
+    """Obtener un producto por ID"""
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
+    producto = productos_collection.find_one({'_id': object_id})
+
+    if not producto:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    return jsonify(producto_to_dict(producto))
+
+@app.route('/api/productos', methods=['POST'])
+def add_producto():
+    """Crear nuevo producto"""
+    data = request.json
+
+    # Validar campos requeridos
+    if not data.get('nombre') or not data.get('precio_lista'):
+        return jsonify({'error': 'Nombre y precio de lista son requeridos'}), 400
+
+    try:
+        precio_lista = float(data.get('precio_lista'))
+    except:
+        return jsonify({'error': 'Precio de lista debe ser un número'}), 400
+
+    # Crear documento
+    nuevo_producto = {
+        'codigo': data.get('codigo', '').strip(),
+        'nombre': data.get('nombre', '').strip(),
+        'precio_lista': precio_lista,
+        'fecha_actualizacion': datetime.now(),
+        'activo': True
+    }
+
+    # Calcular precios por día
+    precios_por_dia = calcular_precios_por_dia(precio_lista)
+    nuevo_producto['precios_por_dia'] = precios_por_dia
+
+    result = productos_collection.insert_one(nuevo_producto)
+    nuevo_producto['_id'] = result.inserted_id
+
+    return jsonify(producto_to_dict(nuevo_producto)), 201
+
+@app.route('/api/productos/<id>', methods=['PUT'])
+def update_producto(id):
+    """Actualizar producto"""
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
+    data = request.json
+
+    update_data = {
+        'fecha_actualizacion': datetime.now()
+    }
+
+    if 'codigo' in data:
+        update_data['codigo'] = data['codigo'].strip()
+    if 'nombre' in data:
+        update_data['nombre'] = data['nombre'].strip()
+    if 'precio_lista' in data:
+        try:
+            precio_lista = float(data['precio_lista'])
+            update_data['precio_lista'] = precio_lista
+            # Recalcular precios por día
+            update_data['precios_por_dia'] = calcular_precios_por_dia(precio_lista)
+        except:
+            return jsonify({'error': 'Precio de lista debe ser un número'}), 400
+
+    result = productos_collection.update_one(
+        {'_id': object_id},
+        {'$set': update_data}
+    )
+
+    if result.matched_count == 0:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    producto = productos_collection.find_one({'_id': object_id})
+    return jsonify(producto_to_dict(producto))
+
+@app.route('/api/productos/<id>', methods=['DELETE'])
+def delete_producto(id):
+    """Eliminar producto (soft delete)"""
+    try:
+        object_id = ObjectId(id)
+    except:
+        return jsonify({'error': 'ID inválido'}), 400
+
+    result = productos_collection.update_one(
+        {'_id': object_id},
+        {'$set': {'activo': False}}
+    )
+
+    if result.matched_count == 0:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    return '', 204
+
+# ENDPOINT DE CALCULO
+
+@app.route('/api/calcular', methods=['POST'])
+def calcular():
+    """
+    Calcular precio final según producto y plan
+    Body: { "producto_id": "...", "plan": "contado_efectivo" }
+    """
+    data = request.json
+
+    if not data.get('producto_id') or not data.get('plan'):
+        return jsonify({'error': 'producto_id y plan son requeridos'}), 400
+
+    try:
+        object_id = ObjectId(data['producto_id'])
+    except:
+        return jsonify({'error': 'producto_id inválido'}), 400
+
+    producto = productos_collection.find_one({'_id': object_id})
+
+    if not producto:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    plan = data['plan']
+    precio_lista = producto['precio_lista']
+
+    # Validar plan
+    planes_validos = ['contado_efectivo', '42_dias', '84_dias', '135_dias', '175_dias', '220_dias']
+    if plan not in planes_validos:
+        return jsonify({'error': f'Plan inválido. Planes válidos: {", ".join(planes_validos)}'}), 400
+
+    resultado = calcular_precio_final(precio_lista, plan)
+    resultado['producto'] = {
+        'id': str(producto['_id']),
+        'codigo': producto.get('codigo', ''),
+        'nombre': producto.get('nombre', '')
+    }
+
+    return jsonify(resultado)
+
+# ENDPOINT DE IMPORTACION
+
+@app.route('/api/import-productos-excel', methods=['POST'])
+def import_productos_excel():
+    """Importar productos desde Excel (hoja de precios)"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({'error': 'File must be Excel format'}), 400
+
+    try:
+        # Leer Excel
+        df = pd.read_excel(file)
+
+        # Validar columnas necesarias
+        if 'Producto' not in df.columns or 'Lista' not in df.columns:
+            return jsonify({'error': 'Excel debe contener columnas: Producto, Lista'}), 400
+
+        imported_count = 0
+        updated_count = 0
+
+        for _, row in df.iterrows():
+            # Validar que tenga producto y precio
+            if pd.isna(row.get('Producto')) or pd.isna(row.get('Lista')):
+                continue
+
+            nombre = str(row['Producto']).strip()
+            precio_lista = float(row['Lista'])
+
+            # Verificar si ya existe (por nombre)
+            producto_existente = productos_collection.find_one({'nombre': nombre})
+
+            if producto_existente:
+                # Actualizar
+                productos_collection.update_one(
+                    {'_id': producto_existente['_id']},
+                    {'$set': {
+                        'precio_lista': precio_lista,
+                        'precios_por_dia': calcular_precios_por_dia(precio_lista),
+                        'fecha_actualizacion': datetime.now()
+                    }}
+                )
+                updated_count += 1
+            else:
+                # Crear nuevo
+                nuevo_producto = {
+                    'codigo': '',
+                    'nombre': nombre,
+                    'precio_lista': precio_lista,
+                    'precios_por_dia': calcular_precios_por_dia(precio_lista),
+                    'fecha_actualizacion': datetime.now(),
+                    'activo': True
+                }
+                productos_collection.insert_one(nuevo_producto)
+                imported_count += 1
+
+        return jsonify({
+            'message': f'{imported_count} productos importados, {updated_count} actualizados'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
