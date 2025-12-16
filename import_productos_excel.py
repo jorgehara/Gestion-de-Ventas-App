@@ -8,10 +8,14 @@ from pymongo import MongoClient
 from datetime import datetime
 import sys
 import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Configuración MongoDB
-MONGO_URI = 'mongodb://localhost:27017/'
-DB_NAME = 'crm_famago'
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+DB_NAME = os.getenv('DB_NAME', 'crm_famago')
 
 def calcular_precios_por_dia(precio_lista):
     """Calcula los precios por día según las fórmulas de recargo"""

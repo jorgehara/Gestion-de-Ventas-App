@@ -3,10 +3,15 @@ Script de diagnóstico para verificar conexión a MongoDB y datos
 """
 from pymongo import MongoClient
 import sys
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Configuración MongoDB
-MONGO_URI = 'mongodb://localhost:27017/'
-DB_NAME = 'crm_famago'
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+DB_NAME = os.getenv('DB_NAME', 'crm_famago')
 
 def diagnosticar():
     print("\n" + "="*60)
