@@ -169,13 +169,24 @@ def importar_productos_db(productos, actualizar_existentes=True):
                                 '$set': {
                                     'precio_lista': precio_lista,
                                     'precios_por_dia': precios_por_dia,
-                                    'fecha_actualizacion': datetime.now()
+                                    'fecha_actualizacion': datetime.now(),
+                                    'activo': True
                                 }
                             }
                         )
                         stats['actualizados'] += 1
                         print(f"✓ Actualizado: {nombre} - Nuevo precio: ${precio_lista:,.2f}")
                     else:
+                        # Aunque no haya cambio en precio, asegurarnos que esté activo
+                        productos_collection.update_one(
+                            {'_id': producto_existente['_id']},
+                            {
+                                '$set': {
+                                    'activo': True,
+                                    'fecha_actualizacion': datetime.now()
+                                }
+                            }
+                        )
                         stats['sin_cambios'] += 1
                 else:
                     stats['sin_cambios'] += 1
