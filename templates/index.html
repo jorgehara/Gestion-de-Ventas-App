@@ -734,6 +734,11 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Controles de Paginación -->
+                <div id="productos-pagination" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px; padding: 20px; background: var(--gray-50); border-radius: 12px;">
+                    <!-- Pagination controls will be loaded here -->
+                </div>
             </div>
 
             <!-- Calculadora de Precios -->
@@ -1256,6 +1261,8 @@
 
         let productosData = [];
         let productosVisible = true;
+        let paginaActual = 1;
+        const productosPorPagina = 30;
 
         // Cargar productos
         async function loadProductos() {
@@ -1278,7 +1285,7 @@
             }
         }
 
-        // Renderizar productos
+        // Renderizar productos con paginación
         function renderProductos(filteredData = null) {
             const tbody = document.getElementById('productos-table');
             const dataToRender = filteredData || productosData;
@@ -1291,10 +1298,17 @@
                         </td>
                     </tr>
                 `;
+                document.getElementById('productos-pagination').innerHTML = '';
                 return;
             }
 
-            tbody.innerHTML = dataToRender.map(p => `
+            // Calcular paginación
+            const totalPaginas = Math.ceil(dataToRender.length / productosPorPagina);
+            const inicio = (paginaActual - 1) * productosPorPagina;
+            const fin = inicio + productosPorPagina;
+            const productosPagina = dataToRender.slice(inicio, fin);
+
+            tbody.innerHTML = productosPagina.map(p => `
                 <tr>
                     <td>${p.codigo || '-'}</td>
                     <td><strong>${p.nombre}</strong></td>
@@ -1312,6 +1326,60 @@
                     </td>
                 </tr>
             `).join('');
+
+            // Renderizar controles de paginación
+            renderPaginacion(totalPaginas, dataToRender.length);
+        }
+
+        // Renderizar controles de paginación
+        function renderPaginacion(totalPaginas, totalProductos) {
+            const paginationDiv = document.getElementById('productos-pagination');
+
+            if (totalPaginas <= 1) {
+                paginationDiv.style.display = 'none';
+                return;
+            }
+
+            paginationDiv.style.display = 'flex';
+
+            const inicio = (paginaActual - 1) * productosPorPagina + 1;
+            const fin = Math.min(paginaActual * productosPorPagina, totalProductos);
+
+            let html = `
+                <button class="btn btn-secondary" onclick="cambiarPagina(1)" ${paginaActual === 1 ? 'disabled' : ''} style="padding: 8px 12px;">
+                    ⏮️ Primera
+                </button>
+                <button class="btn btn-secondary" onclick="cambiarPagina(${paginaActual - 1})" ${paginaActual === 1 ? 'disabled' : ''} style="padding: 8px 12px;">
+                    ◀️ Anterior
+                </button>
+                <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px;">
+                    <span style="font-weight: 600; color: var(--gray-700);">Página ${paginaActual} de ${totalPaginas}</span>
+                    <span style="color: var(--gray-600); font-size: 14px;">(${inicio}-${fin} de ${totalProductos} productos)</span>
+                </div>
+                <button class="btn btn-secondary" onclick="cambiarPagina(${paginaActual + 1})" ${paginaActual === totalPaginas ? 'disabled' : ''} style="padding: 8px 12px;">
+                    Siguiente ▶️
+                </button>
+                <button class="btn btn-secondary" onclick="cambiarPagina(${totalPaginas})" ${paginaActual === totalPaginas ? 'disabled' : ''} style="padding: 8px 12px;">
+                    Última ⏭️
+                </button>
+            `;
+
+            paginationDiv.innerHTML = html;
+        }
+
+        // Cambiar de página
+        function cambiarPagina(nuevaPagina) {
+            paginaActual = nuevaPagina;
+            const searchTerm = document.getElementById('search-producto').value.toLowerCase();
+
+            if (searchTerm) {
+                filtrarProductos();
+            } else {
+                renderProductos();
+            }
+
+            // Scroll suave hacia la tabla
+            document.getElementById('productos-table-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         // Actualizar contador de productos
@@ -1332,6 +1400,9 @@
         // Filtrar productos por búsqueda
         function filtrarProductos() {
             const searchTerm = document.getElementById('search-producto').value.toLowerCase();
+
+            // Resetear a página 1 cuando se filtra
+            paginaActual = 1;
 
             if (!searchTerm) {
                 renderProductos();
