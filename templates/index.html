@@ -687,9 +687,28 @@
                     <input type="file" id="productos-excel-file" accept=".xlsx,.xls" style="display: none;">
                 </div>
 
+                <!-- Barra de búsqueda y controles -->
+                <div style="background: var(--gray-50); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>🔍 Buscar Producto</label>
+                            <input type="text" id="search-producto" placeholder="Buscar por código o nombre..." onkeyup="filtrarProductos()">
+                        </div>
+                        <div style="text-align: center;">
+                            <label style="display: block; font-size: 12px; color: var(--gray-600); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Total Productos</label>
+                            <div style="font-size: 28px; font-weight: 700; color: var(--primary);" id="contador-productos">0</div>
+                        </div>
+                        <div style="align-self: flex-end;">
+                            <button class="btn btn-secondary" id="btn-toggle-productos" onclick="toggleMostrarProductos()">
+                                <span id="toggle-icon">👁️</span> <span id="toggle-text">Ocultar Todo</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="productos-message"></div>
 
-                <div class="table-container">
+                <div class="table-container" id="productos-table-container">
                     <table>
                         <thead>
                             <tr>
@@ -1223,6 +1242,7 @@
         // ==========================================
 
         let productosData = [];
+        let productosVisible = true;
 
         // Cargar productos
         async function loadProductos() {
@@ -1230,37 +1250,8 @@
                 const response = await fetch('/api/productos');
                 productosData = await response.json();
 
-                const tbody = document.getElementById('productos-table');
-
-                if (productosData.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="9" class="empty-state">
-                                <div>No hay productos. Importa la lista de precios o crea uno nuevo.</div>
-                            </td>
-                        </tr>
-                    `;
-                    return;
-                }
-
-                tbody.innerHTML = productosData.map(p => `
-                    <tr>
-                        <td>${p.codigo || '-'}</td>
-                        <td><strong>${p.nombre}</strong></td>
-                        <td>$${Number(p.precio_lista).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                        <td>$${Number(p.precios_por_dia['42']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
-                        <td>$${Number(p.precios_por_dia['84']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
-                        <td>$${Number(p.precios_por_dia['135']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
-                        <td>$${Number(p.precios_por_dia['175']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
-                        <td>$${Number(p.precios_por_dia['220']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn-icon btn-edit" onclick="editarProducto('${p.id}')" title="Editar">✏️</button>
-                                <button class="btn-icon btn-delete" onclick="eliminarProducto('${p.id}')" title="Eliminar">🗑️</button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('');
+                renderProductos();
+                actualizarContadorProductos();
 
                 // Actualizar selector de calculadora
                 const selectProducto = document.getElementById('calc-producto');
@@ -1271,6 +1262,94 @@
 
             } catch (error) {
                 console.error('Error loading productos:', error);
+            }
+        }
+
+        // Renderizar productos
+        function renderProductos(filteredData = null) {
+            const tbody = document.getElementById('productos-table');
+            const dataToRender = filteredData || productosData;
+
+            if (dataToRender.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="empty-state">
+                            <div>No se encontraron productos.</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = dataToRender.map(p => `
+                <tr>
+                    <td>${p.codigo || '-'}</td>
+                    <td><strong>${p.nombre}</strong></td>
+                    <td>$${Number(p.precio_lista).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td>$${Number(p.precios_por_dia['42']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td>$${Number(p.precios_por_dia['84']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td>$${Number(p.precios_por_dia['135']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td>$${Number(p.precios_por_dia['175']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td>$${Number(p.precios_por_dia['220']).toLocaleString('es-AR', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn-icon btn-edit" onclick="editarProducto('${p.id}')" title="Editar">✏️</button>
+                            <button class="btn-icon btn-delete" onclick="eliminarProducto('${p.id}')" title="Eliminar">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Actualizar contador de productos
+        function actualizarContadorProductos() {
+            const searchTerm = document.getElementById('search-producto').value.toLowerCase();
+            let count = productosData.length;
+
+            if (searchTerm) {
+                count = productosData.filter(p =>
+                    (p.codigo && p.codigo.toLowerCase().includes(searchTerm)) ||
+                    (p.nombre && p.nombre.toLowerCase().includes(searchTerm))
+                ).length;
+            }
+
+            document.getElementById('contador-productos').textContent = count;
+        }
+
+        // Filtrar productos por búsqueda
+        function filtrarProductos() {
+            const searchTerm = document.getElementById('search-producto').value.toLowerCase();
+
+            if (!searchTerm) {
+                renderProductos();
+                actualizarContadorProductos();
+                return;
+            }
+
+            const filtered = productosData.filter(p =>
+                (p.codigo && p.codigo.toLowerCase().includes(searchTerm)) ||
+                (p.nombre && p.nombre.toLowerCase().includes(searchTerm))
+            );
+
+            renderProductos(filtered);
+            actualizarContadorProductos();
+        }
+
+        // Toggle mostrar/ocultar productos
+        function toggleMostrarProductos() {
+            productosVisible = !productosVisible;
+            const container = document.getElementById('productos-table-container');
+            const toggleIcon = document.getElementById('toggle-icon');
+            const toggleText = document.getElementById('toggle-text');
+
+            if (productosVisible) {
+                container.style.display = 'block';
+                toggleIcon.textContent = '👁️';
+                toggleText.textContent = 'Ocultar Todo';
+            } else {
+                container.style.display = 'none';
+                toggleIcon.textContent = '👁️‍🗨️';
+                toggleText.textContent = 'Mostrar Todo';
             }
         }
 
