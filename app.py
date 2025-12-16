@@ -58,6 +58,7 @@ def cliente_to_dict(cliente):
             'direccion': '',
             'barrio': '',
             'dni': '',
+            'telefono': '12345',
             'es_cliente': '',
             'detalle': '',
             'interes_1': '',
@@ -97,7 +98,8 @@ def get_clientes():
         filtro['$or'] = [
             {'cliente': {'$regex': search, '$options': 'i'}},
             {'nombre_negocio': {'$regex': search, '$options': 'i'}},
-            {'comentario': {'$regex': search, '$options': 'i'}}
+            {'comentario': {'$regex': search, '$options': 'i'}},
+            {'telefono': {'$regex': search, '$options': 'i'}}
         ]
 
     # Buscar y ordenar por fecha descendente
@@ -118,6 +120,7 @@ def add_cliente():
         'direccion': data.get('direccion', '').strip() or None,
         'barrio': data.get('barrio', '').strip() or None,
         'dni': data.get('dni', '').strip() or None,
+        'telefono': data.get('telefono', '12345').strip() or '12345',
         'es_cliente': data.get('es_cliente', '').strip() or None,
         'detalle': data.get('detalle', '').strip() or None,
         'interes_1': data.get('interes_1', '').strip() or None,
@@ -177,7 +180,7 @@ def update_cliente(id):
 
     campos = [
         'cliente', 'nombre_negocio', 'localidad', 'direccion', 'barrio',
-        'dni', 'es_cliente', 'detalle', 'interes_1', 'interes_2', 'interes_3',
+        'dni', 'telefono', 'es_cliente', 'detalle', 'interes_1', 'interes_2', 'interes_3',
         'cantidad_compras', 'intencion_comprar', 'accion', 'comentario'
     ]
 
@@ -277,6 +280,8 @@ def import_excel():
             'DIRECCION': 'direccion',
             'BARRIO': 'barrio',
             'DNI': 'dni',
+            'TELEFONO': 'telefono',
+            'TELÉFONO': 'telefono',
             'ES CLIENTE?': 'es_cliente',
             'DETALLE': 'detalle',
             'INTERES 1 ': 'interes_1',
@@ -308,6 +313,7 @@ def import_excel():
                 'direccion': str(row.get('direccion', '')) if pd.notna(row.get('direccion')) else None,
                 'barrio': str(row.get('barrio', '')) if pd.notna(row.get('barrio')) else None,
                 'dni': str(row.get('dni', '')) if pd.notna(row.get('dni')) else None,
+                'telefono': str(row.get('telefono', '12345')) if pd.notna(row.get('telefono')) else '12345',
                 'es_cliente': str(row.get('es_cliente', '')) if pd.notna(row.get('es_cliente')) else None,
                 'detalle': str(row.get('detalle', '')) if pd.notna(row.get('detalle')) else None,
                 'interes_1': str(row.get('interes_1', '')) if pd.notna(row.get('interes_1')) else None,
@@ -368,6 +374,7 @@ def export_excel():
             'DIRECCION': c.get('direccion', ''),
             'BARRIO': c.get('barrio', ''),
             'DNI': c.get('dni', ''),
+            'TELEFONO': c.get('telefono', '12345'),
             'ES CLIENTE?': c.get('es_cliente', ''),
             'DETALLE': c.get('detalle', ''),
             'INTERES 1': c.get('interes_1', ''),

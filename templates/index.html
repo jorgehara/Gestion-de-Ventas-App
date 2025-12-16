@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRM Famago - Gestión de Clientes</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23ff8c00'/><text x='50' y='50' font-family='Arial, sans-serif' font-size='45' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='central'>JM</text></svg>">
     <style>
         * {
             margin: 0;
@@ -538,7 +539,7 @@
             <div class="filters">
                 <div class="form-group">
                     <label>🔍 Buscar</label>
-                    <input type="text" id="search" placeholder="Nombre, negocio, comentario...">
+                    <input type="text" id="search" placeholder="Nombre, negocio, teléfono, comentario...">
                 </div>
                 <div class="form-group">
                     <label>📍 Localidad</label>
@@ -569,6 +570,7 @@
                         <tr>
                             <th>Cliente</th>
                             <th>Negocio</th>
+                            <th>Teléfono</th>
                             <th>Localidad</th>
                             <th>Intención</th>
                             <th>Comentario</th>
@@ -609,6 +611,10 @@
                     <div class="form-group">
                         <label>DNI</label>
                         <input type="text" name="dni">
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono *</label>
+                        <input type="text" name="telefono" value="12345" required>
                     </div>
                     <div class="form-group">
                         <label>Es Cliente?</label>
@@ -879,6 +885,10 @@
                         <input type="text" id="edit-dni">
                     </div>
                     <div class="form-group">
+                        <label>Teléfono</label>
+                        <input type="text" id="edit-telefono">
+                    </div>
+                    <div class="form-group">
                         <label>Es Cliente?</label>
                         <select id="edit-es_cliente">
                             <option value="">-</option>
@@ -1022,18 +1032,19 @@
                 if (clientes.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="6" class="empty-state">
+                            <td colspan="7" class="empty-state">
                                 <div>No se encontraron clientes</div>
                             </td>
                         </tr>
                     `;
                     return;
                 }
-                
+
                 tbody.innerHTML = clientes.map(c => `
                     <tr>
                         <td><strong>${c.cliente}</strong></td>
                         <td>${c.nombre_negocio || '-'}</td>
+                        <td>${c.telefono || '12345'}</td>
                         <td>${c.localidad || '-'}</td>
                         <td><span class="badge badge-${c.intencion_comprar.toLowerCase().replace(' ', '-').replace('ó', 'o')}">${c.intencion_comprar}</span></td>
                         <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.comentario || '-'}</td>
@@ -1115,6 +1126,7 @@
                 document.getElementById('edit-direccion').value = cliente.direccion || '';
                 document.getElementById('edit-barrio').value = cliente.barrio || '';
                 document.getElementById('edit-dni').value = cliente.dni || '';
+                document.getElementById('edit-telefono').value = cliente.telefono || '12345';
                 document.getElementById('edit-es_cliente').value = cliente.es_cliente || '';
                 document.getElementById('edit-cantidad_compras').value = cliente.cantidad_compras || '';
                 document.getElementById('edit-intencion_comprar').value = cliente.intencion_comprar || 'POCA';
@@ -1147,6 +1159,7 @@
                 direccion: document.getElementById('edit-direccion').value,
                 barrio: document.getElementById('edit-barrio').value,
                 dni: document.getElementById('edit-dni').value,
+                telefono: document.getElementById('edit-telefono').value,
                 es_cliente: document.getElementById('edit-es_cliente').value,
                 cantidad_compras: document.getElementById('edit-cantidad_compras').value,
                 intencion_comprar: document.getElementById('edit-intencion_comprar').value,

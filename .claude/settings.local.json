@@ -15,7 +15,8 @@
       "Bash(net start MongoDB)",
       "Bash(netstat:*)",
       "Bash(python analyze_excel.py:*)",
-      "Bash(python import_productos_excel.py:*)"
+      "Bash(python import_productos_excel.py:*)",
+      "Bash(python agregar_telefonos.py:*)"
     ]
   }
 }
